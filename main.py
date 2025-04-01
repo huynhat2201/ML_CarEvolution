@@ -1,121 +1,46 @@
-import pandas as pd
-
-# Đặt tên cho các cột theo file mô tả dữ liệu
-columns = ['buying', 'maint', 'doors', 'persons', 'lug_boot', 'safety', 'class']
-
-# Đọc dữ liệu trực tiếp từ file car.data trong thư mục dự án
-data = pd.read_csv('car.data', names=columns)
-
-# In ra 5 dòng đầu tiên để kiểm tra
-print(data.head())
-
-# Kiểm tra thông tin dữ liệu
-print("\nThông tin về dữ liệu:")
-print(data.info())
-
-# Kiểm tra số lượng mẫu của từng nhãn (class)
-print("\nPhân phối của thuộc tính mục tiêu:")
-print(data['class'].value_counts())
-
-# Hiển thị thống kê cơ bản (chỉ áp dụng cho dữ liệu dạng số)
-print("\nThống kê dữ liệu:")
-print(data.describe())
-
-from sklearn.preprocessing import LabelEncoder
-
-# Chuyển đổi dữ liệu categorical thành số
-encoder = LabelEncoder()
-
-for col in data.columns:
-    data[col] = encoder.fit_transform(data[col])
-
-print("\nDữ liệu sau khi mã hóa:")
-print(data.head())
-
-from sklearn.model_selection import train_test_split
-
-
-# Phân chia tập dữ liệu (70% train - 30% test)
-X = data.drop('class', axis=1)  # Tất cả các cột trừ cột 'class'
-y = data['class']  # Cột mục tiêu
-
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.3, random_state=42
+from scripts.load_data import load_and_preprocess_data
+from scripts.train_model import (
+    split_data, train_decision_tree, train_naive_bayes,
+    tune_decision_tree, save_model
 )
+from scripts.evaluate import (
+    evaluate_model, plot_class_distribution,
+    plot_accuracy_comparison, plot_tree_structure
+)
+from scripts.predict import load_model, predict
 
-print("\nKích thước tập huấn luyện:", X_train.shape)
-print("Kích thước tập kiểm tra:", X_test.shape)
+# 1. Load dữ liệu & xử lý
+df = load_and_preprocess_data()
 
-# Sử dụng Decision Tree để phân loại xe
+# 2. Trực quan hóa phân phối nhãn
+plot_class_distribution(df)
 
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.metrics import accuracy_score, classification_report
+# 3. Chia dữ liệu
+X_train, X_test, y_train, y_test = split_data(df)
 
-# Khởi tạo mô hình
-clf = DecisionTreeClassifier(random_state=42)
+# 4. Huấn luyện hai mô hình
+dt_model = train_decision_tree(X_train, y_train)
+nb_model = train_naive_bayes(X_train, y_train)
 
-# Huấn luyện mô hình trên tập huấn luyện
-clf.fit(X_train, y_train)
+# 5. Đánh giá mô hình
+acc_dt = evaluate_model(dt_model, X_test, y_test, "Decision Tree")
+acc_nb = evaluate_model(nb_model, X_test, y_test, "Naive Bayes")
 
-# Dự đoán trên tập kiểm tra
-y_pred = clf.predict(X_test)
+# 6. Biểu đồ so sánh
+plot_accuracy_comparison(acc_dt, acc_nb)
 
-# Đánh giá mô hình
-print("\nĐộ chính xác của mô hình Decision Tree:", accuracy_score(y_test, y_pred))
-print("\nBáo cáo phân loại:")
-print(classification_report(y_test, y_pred))
+# 7. Vẽ cây quyết định
+plot_tree_structure(dt_model, X_train.columns)
 
-# Sử dung mô hình Naive Bayes
+# 8. Tối ưu cây quyết định với GridSearchCV
+best_model = tune_decision_tree(X_train, y_train)
 
-from sklearn.naive_bayes import GaussianNB
+# 9. Lưu mô hình tốt nhất
+save_model(best_model)
 
-# Khởi tạo mô hình Naive Bayes
-nb_model = GaussianNB()
+# 10. Load và dự đoán với mô hình đã lưu
+loaded_model = load_model()
+y_pred_loaded = predict(loaded_model, X_test)
 
-# Huấn luyện mô hình
-nb_model.fit(X_train, y_train)
-
-# Dự đoán trên tập kiểm tra
-y_pred_nb = nb_model.predict(X_test)
-
-# Đánh giá mô hình
-print("\nĐộ chính xác của mô hình Naive Bayes:", accuracy_score(y_test, y_pred_nb))
-print("\nBáo cáo phân loại (Naive Bayes):")
-print(classification_report(y_test, y_pred_nb))
-
-
-# Vẽ biểu đồ phân phối dữ liệu
-
-import seaborn as sns
-import matplotlib.pyplot as plt
-
-# # Biểu đồ phân phối của thuộc tính mục tiêu (class)
-plt.figure(figsize=(8, 5))
-sns.countplot(x=data['class'])
-plt.title("Phân phối của nhãn (class)")
-plt.xlabel("Loại xe")
-plt.ylabel("Số lượng")
-plt.show()
-
-
-#So sánh độ chính xác của hai mô hình
-accuracy_dt = accuracy_score(y_test, y_pred)  # Decision Tree
-accuracy_nb = accuracy_score(y_test, y_pred_nb)  # Naive Bayes
-
-#Tạo biểu đồ so sánh
-plt.figure(figsize=(6, 4))
-sns.barplot(x=["Decision Tree", "Naive Bayes"], y=[accuracy_dt, accuracy_nb])
-plt.title("So sánh độ chính xác của mô hình")
-plt.ylabel("Accuracy")
-plt.ylim(0, 1)  # Giới hạn trục y từ 0 đến 1
-plt.show()
-
-
-# Vẽ cây quyết định
-
-from sklearn.tree import plot_tree
-
-plt.figure(figsize=(40, 100))
-plot_tree(clf, feature_names=X.columns, class_names=['unacc', 'acc', 'good', 'vgood'], filled=True)
-plt.title("Cấu trúc cây quyết định")
-plt.show()
+from sklearn.metrics import accuracy_score
+print("\n Accuracy mô hình đã lưu:", accuracy_score(y_test, y_pred_loaded))
